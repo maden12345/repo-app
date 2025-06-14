@@ -1,8 +1,9 @@
-from flask import Flask, request, send_file
+from flask import Flask, request, send_file, session, redirect, url_for
 from datetime import datetime
 import sqlite3
 
 app = Flask(__name__)
+app.secret_key = 'supersecretkey'  # Kendine göre güçlü bir anahtar koy
 
 def init_db():
     conn = sqlite3.connect('ip_logs.db')
@@ -32,12 +33,40 @@ def log_ip():
     conn.close()
 
     # Dosyaya kaydet (append)
-    with open("ip_logs.txt", "a") as f:
+    with open("ip_logs.txt", "a", encoding="utf-8") as f:
         f.write(f"[{time}] IP: {ip} | Agent: {user_agent}\n")
 
     return "<h1>Bağlantı kaydedildi.</h1>"
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        if username == 'admin' and password == '554433':
+            session['logged_in'] = True
+            return redirect(url_for('show_logs'))
+        else:
+            return "<h3>Hatalı kullanıcı adı veya şifre</h3>", 401
+    return '''
+        <form method="post">
+            Kullanıcı Adı: <input type="text" name="username" /><br>
+            Şifre: <input type="password" name="password" /><br>
+            <input type="submit" value="Giriş" />
+        </form>
+    '''
+
+def login_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 @app.route("/logs")
+@login_required
 def show_logs():
     conn = sqlite3.connect('ip_logs.db')
     c = conn.cursor()
@@ -52,22 +81,28 @@ def show_logs():
     return html
 
 @app.route("/logs-file")
+@login_required
 def logs_file():
     try:
-        with open("ip_logs.txt", "r") as f:
+        with open("ip_logs.txt", "r", encoding="utf-8") as f:
             content = f.read()
         return "<h2>IP Logları (Dosya)</h2><pre>" + content + "</pre>"
     except FileNotFoundError:
         return "<p>Dosya bulunamadı.</p>"
 
 @app.route("/download-logs")
+@login_required
 def download_logs():
     try:
         return send_file("ip_logs.txt", as_attachment=True)
     except FileNotFoundError:
         return "<p>Dosya bulunamadı.</p>"
 
+@app.route('/logout')
+def logout():
+    session.pop('logged_in', None)
+    return redirect(url_for('login'))
+
 if __name__ == "__main__":
     init_db()
     app.run(debug=True, host="0.0.0.0", port=10000)
-
