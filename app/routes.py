@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, send_file
 from datetime import datetime
 import sqlite3
 
@@ -37,7 +37,37 @@ def log_ip():
 
     return "<h1>Bağlantı kaydedildi.</h1>"
 
+@app.route("/logs")
+def show_logs():
+    conn = sqlite3.connect('ip_logs.db')
+    c = conn.cursor()
+    c.execute('SELECT * FROM logs ORDER BY id DESC')
+    logs = c.fetchall()
+    conn.close()
+
+    html = "<h2>IP Logları (Veritabanı)</h2><ul>"
+    for log in logs:
+        html += f"<li>{log[1]} - {log[2]} - {log[3]}</li>"
+    html += "</ul>"
+    return html
+
+@app.route("/logs-file")
+def logs_file():
+    try:
+        with open("ip_logs.txt", "r") as f:
+            content = f.read()
+        return "<h2>IP Logları (Dosya)</h2><pre>" + content + "</pre>"
+    except FileNotFoundError:
+        return "<p>Dosya bulunamadı.</p>"
+
+@app.route("/download-logs")
+def download_logs():
+    try:
+        return send_file("ip_logs.txt", as_attachment=True)
+    except FileNotFoundError:
+        return "<p>Dosya bulunamadı.</p>"
+
 if __name__ == "__main__":
     init_db()
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0", port=10000)
 
